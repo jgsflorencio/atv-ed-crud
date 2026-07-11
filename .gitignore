@@ -1,0 +1,12 @@
+node_modules
+bun.lock
+/.next/
+/out/
+
+/build
+
+.env*
+!.env.example
+
+*.tsbuildinfo
+next-env.d.ts
