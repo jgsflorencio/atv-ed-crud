@@ -1,313 +1,157 @@
-import { asc, desc, eq, isNull, sql } from "drizzle-orm";
-import { randomInt } from "node:crypto";
-import { db } from "@/db";
-import { courses, enrollments, students, users } from "@/db/schema";
+import { User } from './models/User';
+import { Student } from './models/Student';
+import { Course } from './models/Course';
+import { Enrollment } from './models/Enrollment';
+import mongoose from 'mongoose';
 
-function generateNumericCode(length: number) {
-  return Array.from({ length }, () => randomInt(0, 10)).join("");
+export async function listUsers() {
+  return await User.find().sort({ _id: 1 });
 }
 
-async function generateUniqueCourseCode() {
-  for (let attempt = 0; attempt < 20; attempt += 1) {
-    const codigo = generateNumericCode(6);
-    const [existing] = await db
-      .select({ id: courses.id })
-      .from(courses)
-      .where(eq(courses.codigo, codigo))
-      .limit(1);
-    if (!existing) {
-      return codigo;
-    }
-  }
-  throw new Error("Falha ao gerar código de curso único.");
-}
-
-async function generateUniqueStudentMatricula() {
-  for (let attempt = 0; attempt < 20; attempt += 1) {
-    const matricula = generateNumericCode(8);
-    const [existing] = await db
-      .select({ id: students.id })
-      .from(students)
-      .where(eq(students.matricula, matricula))
-      .limit(1);
-    if (!existing) {
-      return matricula;
-    }
-  }
-  throw new Error("Falha ao gerar matrícula única.");
-}
-
-export function listUsers() {
-  return db.select().from(users).orderBy(asc(users.id));
-}
-
-export async function getUserById(id: number) {
-  const [data] = await db.select().from(users).where(eq(users.id, id)).limit(1);
-  return data ?? null;
+export async function getUserById(id: string) {
+  const user = await User.findById(id);
+  return user || null;
 }
 
 export async function createUser(nome: string, email: string) {
-  const [created] = await db.insert(users).values({ nome, email }).returning();
-  return created;
+  const user = new User({ nome, email });
+  await user.save();
+  return user;
 }
 
-export async function updateUser(id: number, nome: string, email: string) {
-  const [updated] = await db
-    .update(users)
-    .set({ nome, email })
-    .where(eq(users.id, id))
-    .returning();
-  return updated ?? null;
+export async function updateUser(id: string, nome: string, email: string) {
+  const user = await User.findByIdAndUpdate(
+    id, 
+    { nome, email },
+    { returnDocument: 'after', runValidators: true }
+  );
+  return user || null;
 }
 
-export async function deleteUserById(id: number) {
-  const [deleted] = await db
-    .delete(users)
-    .where(eq(users.id, id))
-    .returning({ id: users.id });
-  return deleted ?? null;
+export async function deleteUserById(id: string) {
+  const user = await User.findByIdAndDelete(id);
+  return user ? { id: user._id.toString() } : null;
 }
 
-export function listStudents() {
-  return db
-    .select({
-      id: students.id,
-      matricula: students.matricula,
-      userId: students.userId,
-      userNome: users.nome,
-      userEmail: users.email,
+export async function listStudents() {
+  return await Student.find().populate('user_id').sort({ _id: 1 });
+}
+
+export async function getStudentById(id: string) {
+  const student = await Student.findById(id).populate('user_id');
+  return student || null;
+}
+
+export async function createStudent(matricula: string, userId: string) {
+  const student = new Student({ 
+    matricula, 
+    user_id: new mongoose.Types.ObjectId(userId) 
+  });
+  await student.save();
+  return await student.populate('user_id');
+}
+
+export async function updateStudent(id: string, matricula: string, userId: string) {
+  const student = await Student.findByIdAndUpdate(
+    id,
+    { matricula, user_id: new mongoose.Types.ObjectId(userId) },
+    { returnDocument: 'after', runValidators: true }
+  );
+  return student ? await student.populate('user_id') : null;
+}
+
+export async function deleteStudentById(id: string) {
+  const student = await Student.findByIdAndDelete(id);
+  return student ? { id: student._id.toString() } : null;
+}
+
+export async function listCourses() {
+  return await Course.find().sort({ _id: 1 });
+}
+
+export async function getCourseById(id: string) {
+  const course = await Course.findById(id);
+  return course || null;
+}
+
+export async function createCourse(codigo: string, nome: string) {
+  const course = new Course({ codigo, nome });
+  await course.save();
+  return course;
+}
+
+export async function updateCourse(id: string, codigo: string, nome: string) {
+  const course = await Course.findByIdAndUpdate(
+    id,
+    { codigo, nome },
+    { returnDocument: 'after', runValidators: true }
+  );
+  return course || null;
+}
+
+export async function deleteCourseById(id: string) {
+  const course = await Course.findByIdAndDelete(id);
+  return course ? { id: course._id.toString() } : null;
+}
+
+export async function listEnrollments() {
+  return await Enrollment.find()
+    .populate({
+      path: 'student_id',
+      populate: { path: 'user_id' }
     })
-    .from(students)
-    .leftJoin(users, eq(students.userId, users.id))
-    .orderBy(asc(students.id));
+    .populate('course_id')
+    .sort({ _id: 1 });
 }
 
-export async function getStudentById(id: number) {
-  const [data] = await db
-    .select({
-      id: students.id,
-      matricula: students.matricula,
-      userId: students.userId,
-      userNome: users.nome,
-      userEmail: users.email,
+export async function getEnrollmentById(id: string) {
+  const enrollment = await Enrollment.findById(id)
+    .populate({
+      path: 'student_id',
+      populate: { path: 'user_id' }
     })
-    .from(students)
-    .leftJoin(users, eq(students.userId, users.id))
-    .where(eq(students.id, id))
-    .limit(1);
-  return data ?? null;
+    .populate('course_id');
+  return enrollment || null;
 }
 
-export async function createStudent(userId: number) {
-  const matricula = await generateUniqueStudentMatricula();
-  const [created] = await db.insert(students).values({ matricula, userId }).returning();
-  return created;
-}
-
-export async function updateStudent(id: number, userId: number) {
-  const [updated] = await db
-    .update(students)
-    .set({ userId })
-    .where(eq(students.id, id))
-    .returning();
-  return updated ?? null;
-}
-
-export async function deleteStudentById(id: number) {
-  const [deleted] = await db
-    .delete(students)
-    .where(eq(students.id, id))
-    .returning({ id: students.id });
-  return deleted ?? null;
-}
-
-export function listCourses() {
-  return db.select().from(courses).orderBy(asc(courses.id));
-}
-
-export async function getCourseById(id: number) {
-  const [data] = await db.select().from(courses).where(eq(courses.id, id)).limit(1);
-  return data ?? null;
-}
-
-export async function createCourse(nome: string) {
-  const codigo = await generateUniqueCourseCode();
-  const [created] = await db.insert(courses).values({ codigo, nome }).returning();
-  return created;
-}
-
-export async function updateCourse(id: number, nome: string) {
-  const [updated] = await db
-    .update(courses)
-    .set({ nome })
-    .where(eq(courses.id, id))
-    .returning();
-  return updated ?? null;
-}
-
-export async function deleteCourseById(id: number) {
-  const [deleted] = await db
-    .delete(courses)
-    .where(eq(courses.id, id))
-    .returning({ id: courses.id });
-  return deleted ?? null;
-}
-
-export function listEnrollments() {
-  return db
-    .select({
-      id: enrollments.id,
-      studentId: enrollments.studentId,
-      courseId: enrollments.courseId,
-      semestre: enrollments.semestre,
-      studentMatricula: students.matricula,
-      courseCodigo: courses.codigo,
+export async function createEnrollment(studentId: string, courseId: string, semestre: string) {
+  const enrollment = new Enrollment({
+    student_id: new mongoose.Types.ObjectId(studentId),
+    course_id: new mongoose.Types.ObjectId(courseId),
+    semestre
+  });
+  await enrollment.save();
+  
+  return await Enrollment.findById(enrollment._id)
+    .populate({
+      path: 'student_id',
+      populate: { path: 'user_id' }
     })
-    .from(enrollments)
-    .leftJoin(students, eq(enrollments.studentId, students.id))
-    .leftJoin(courses, eq(enrollments.courseId, courses.id))
-    .orderBy(asc(enrollments.id));
+    .populate('course_id');
 }
 
-export async function getEnrollmentById(id: number) {
-  const [data] = await db
-    .select({
-      id: enrollments.id,
-      studentId: enrollments.studentId,
-      courseId: enrollments.courseId,
-      semestre: enrollments.semestre,
-      studentMatricula: students.matricula,
-      courseCodigo: courses.codigo,
-    })
-    .from(enrollments)
-    .leftJoin(students, eq(enrollments.studentId, students.id))
-    .leftJoin(courses, eq(enrollments.courseId, courses.id))
-    .where(eq(enrollments.id, id))
-    .limit(1);
-  return data ?? null;
-}
-
-export async function createEnrollment(studentId: number, courseId: number, semestre: string) {
-  const [created] = await db
-    .insert(enrollments)
-    .values({ studentId, courseId, semestre })
-    .returning();
-  return created;
-}
-
-export async function updateEnrollment(
-  id: number,
-  studentId: number,
-  courseId: number,
-  semestre: string,
-) {
-  const [updated] = await db
-    .update(enrollments)
-    .set({ studentId, courseId, semestre })
-    .where(eq(enrollments.id, id))
-    .returning();
-  return updated ?? null;
-}
-
-export async function deleteEnrollmentById(id: number) {
-  const [deleted] = await db
-    .delete(enrollments)
-    .where(eq(enrollments.id, id))
-    .returning({ id: enrollments.id });
-  return deleted ?? null;
-}
-
-export type AcademicOverview = {
-  totals: {
-    users: number;
-    students: number;
-    courses: number;
-    enrollments: number;
-  };
-  studentsWithoutEnrollment: number;
-  coursesWithoutEnrollment: number;
-  topCourses: Array<{
-    id: number;
-    codigo: string;
-    nome: string;
-    enrollments: number;
-  }>;
-  semesters: Array<{
-    semestre: string;
-    enrollments: number;
-  }>;
-};
-
-async function countFrom(table: typeof users | typeof students | typeof courses | typeof enrollments) {
-  const [row] = await db
-    .select({ count: sql<number>`cast(count(*) as int)` })
-    .from(table);
-  return row?.count ?? 0;
-}
-
-export async function getAcademicOverview(): Promise<AcademicOverview> {
-  const [usersCount, studentsCount, coursesCount, enrollmentsCount] = await Promise.all([
-    countFrom(users),
-    countFrom(students),
-    countFrom(courses),
-    countFrom(enrollments),
-  ]);
-
-  const [studentsWithoutEnrollment, coursesWithoutEnrollment] = await Promise.all([
-    db
-      .select({ count: sql<number>`cast(count(*) as int)` })
-      .from(students)
-      .leftJoin(enrollments, eq(students.id, enrollments.studentId))
-      .where(isNull(enrollments.id))
-      .then((rows) => rows[0]?.count ?? 0),
-    db
-      .select({ count: sql<number>`cast(count(*) as int)` })
-      .from(courses)
-      .leftJoin(enrollments, eq(courses.id, enrollments.courseId))
-      .where(isNull(enrollments.id))
-      .then((rows) => rows[0]?.count ?? 0),
-  ]);
-
-  const topCoursesRows = await db
-    .select({
-      id: courses.id,
-      codigo: courses.codigo,
-      nome: courses.nome,
-      enrollments: sql<number>`cast(count(${enrollments.id}) as int)`,
-    })
-    .from(courses)
-    .leftJoin(enrollments, eq(courses.id, enrollments.courseId))
-    .groupBy(courses.id, courses.codigo, courses.nome)
-    .orderBy(desc(sql`count(${enrollments.id})`), asc(courses.codigo))
-    .limit(5);
-
-  const semesterRows = await db
-    .select({
-      semestre: enrollments.semestre,
-      enrollments: sql<number>`cast(count(${enrollments.id}) as int)`,
-    })
-    .from(enrollments)
-    .groupBy(enrollments.semestre)
-    .orderBy(desc(enrollments.semestre));
-
-  return {
-    totals: {
-      users: usersCount,
-      students: studentsCount,
-      courses: coursesCount,
-      enrollments: enrollmentsCount,
+export async function updateEnrollment(id: string, studentId: string, courseId: string, semestre: string) {
+  const enrollment = await Enrollment.findByIdAndUpdate(
+    id,
+    {
+      student_id: new mongoose.Types.ObjectId(studentId),
+      course_id: new mongoose.Types.ObjectId(courseId),
+      semestre
     },
-    studentsWithoutEnrollment,
-    coursesWithoutEnrollment,
-    topCourses: topCoursesRows.map((course) => ({
-      id: course.id,
-      codigo: course.codigo,
-      nome: course.nome,
-      enrollments: Number(course.enrollments),
-    })),
-    semesters: semesterRows.map((row) => ({
-      semestre: row.semestre,
-      enrollments: Number(row.enrollments),
-    })),
-  };
+    { returnDocument: 'after', runValidators: true }
+  );
+  
+  if (!enrollment) return null;
+  
+  return await Enrollment.findById(enrollment._id)
+    .populate({
+      path: 'student_id',
+      populate: { path: 'user_id' }
+    })
+    .populate('course_id');
+}
+
+export async function deleteEnrollmentById(id: string) {
+  const enrollment = await Enrollment.findByIdAndDelete(id);
+  return enrollment ? { id: enrollment._id.toString() } : null;
 }
