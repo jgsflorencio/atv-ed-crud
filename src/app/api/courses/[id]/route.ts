@@ -1,15 +1,14 @@
 import { NextResponse } from "next/server";
-import {
-  deleteCourseById,
-  getCourseById,
-  updateCourse,
-} from "@/db/queries";
+import { deleteCourseById, getCourseById, updateCourse } from "@/db/queries";
+import { connectDB } from "@/db/connection";
 import { isPgError, jsonError, parseId } from "@/lib/api";
 
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  await connectDB();
+
   const { id } = await params;
   const courseId = parseId(id);
   if (!courseId) {
@@ -27,6 +26,8 @@ export async function PUT(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  await connectDB();
+
   const { id } = await params;
   const courseId = parseId(id);
   if (!courseId) {
@@ -57,6 +58,8 @@ export async function DELETE(
   _request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  await connectDB();
+
   const { id } = await params;
   const courseId = parseId(id);
   if (!courseId) {

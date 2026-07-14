@@ -1,13 +1,18 @@
 import { NextResponse } from "next/server";
 import { createCourse, listCourses } from "@/db/queries";
+import { connectDB } from "@/db/connection";
 import { isPgError, jsonError } from "@/lib/api";
 
 export async function GET() {
+  await connectDB();
+
   const data = await listCourses();
   return NextResponse.json(data);
 }
 
 export async function POST(request: Request) {
+  await connectDB();
+
   const body = (await request.json()) as { nome?: string };
   const nome = body.nome?.trim();
 

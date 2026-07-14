@@ -1,13 +1,18 @@
 import { NextResponse } from "next/server";
 import { createStudent, listStudents } from "@/db/queries";
 import { isPgError, jsonError } from "@/lib/api";
+import { connectDB } from "@/db/connection";
 
 export async function GET() {
+  await connectDB();
+
   const data = await listStudents();
   return NextResponse.json(data);
 }
 
 export async function POST(request: Request) {
+  await connectDB();
+
   const body = (await request.json()) as { userId?: number };
   const userId = Number(body.userId);
 
